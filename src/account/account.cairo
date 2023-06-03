@@ -2,10 +2,8 @@ use core::traits::Into;
 use array::ArrayTrait;
 use array::SpanTrait;
 use option::OptionTrait;
-use serde::Serde;
-use serde::deserialize_array_helper;
-use serde::serialize_array_helper;
 use zeroable::Zeroable;
+use rules_account::utils::serde::SpanSerde;
 
 use rules_account::account::interface::Call;
 
@@ -62,12 +60,12 @@ mod Account {
   use rules_account::account::interface::ERC1271_VALIDATED;
   use rules_account::account::interface::IACCOUNT_ID;
   use rules_account::introspection::erc165::ERC165;
+  use rules_account::utils::zeroable::U64Zeroable;
+  use rules_account::utils::into::BoolIntoU8;
+  use rules_account::utils::serde::SpanSerde;
 
   use super::Call;
   use super::QUERY_VERSION;
-  use super::SpanSerde;
-  use super::U64Zeroable;
-  use super::BoolIntoU8;
   use super::TRANSACTION_VERSION;
 
   const TRIGGER_ESCAPE_SIGNER_SELECTOR: felt252 =
@@ -463,46 +461,6 @@ mod Account {
   fn _assert_no_self_calls(account_contract_address: starknet::ContractAddress, calls: Array<Call>) {
     loop {
 
-    }
-  }
-}
-
-impl SpanSerde<
-  T, impl TSerde: Serde<T>, impl TCopy: Copy<T>, impl TDrop: Drop<T>
-> of Serde<Span<T>> {
-  fn serialize(self: @Span<T>, ref output: Array<felt252>) {
-    (*self).len().serialize(ref output);
-    serialize_array_helper(*self, ref output);
-  }
-  fn deserialize(ref serialized: Span<felt252>) -> Option<Span<T>> {
-    let length = *serialized.pop_front()?;
-    let mut arr = ArrayTrait::new();
-    Option::Some(deserialize_array_helper(ref serialized, arr, length)?.span())
-  }
-}
-
-// Not available in cairo@1.1.0 but coming soon
-impl U64Zeroable of Zeroable<u64> {
-  fn zero() -> u64 {
-    0
-  }
-  #[inline(always)]
-  fn is_zero(self: u64) -> bool {
-    self == U64Zeroable::zero()
-  }
-  #[inline(always)]
-  fn is_non_zero(self: u64) -> bool {
-    self != U64Zeroable::zero()
-  }
-}
-
-impl BoolIntoU8 of Into<bool, u8> {
-  #[inline(always)]
-  fn into(self: bool) -> u8 {
-    if (self) {
-      1_u8
-    } else {
-      0_u8
     }
   }
 }
