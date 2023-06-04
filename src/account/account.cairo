@@ -159,7 +159,7 @@ mod Account {
 
   #[constructor]
   fn constructor(signer_public_key_: felt252, guardian_public_key_: felt252) {
-    _initializer(signer_public_key_, guardian_public_key_);
+    initializer(signer_public_key_, guardian_public_key_);
   }
 
   //
@@ -438,7 +438,7 @@ mod Account {
   // Init
 
   #[internal]
-  fn _initializer(signer_public_key_: felt252, guardian_public_key_: felt252) {
+  fn initializer(signer_public_key_: felt252, guardian_public_key_: felt252) {
     _signer_public_key::write(signer_public_key_);
     _guardian_public_key::write(guardian_public_key_);
 
