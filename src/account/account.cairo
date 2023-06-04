@@ -1,11 +1,7 @@
-use core::traits::Into;
-use array::ArrayTrait;
-use array::SpanTrait;
-use option::OptionTrait;
-use zeroable::Zeroable;
-use rules_account::utils::serde::SpanSerde;
+use array::Array;
 
 use rules_account::account::interface::Call;
+use rules_account::utils::serde::SpanSerde;
 
 const TRANSACTION_VERSION: felt252 = 1;
 // 2 ** 128 + TRANSACTION_VERSION
@@ -48,8 +44,7 @@ trait AccountABI {
 
 #[account_contract]
 mod Account {
-  use array::SpanTrait;
-  use array::ArrayTrait;
+  use array::{ ArrayTrait, SpanTrait };
   use box::BoxTrait;
   use ecdsa::check_ecdsa_signature;
   use serde::ArraySerde;
@@ -57,13 +52,12 @@ mod Account {
   use traits::Into;
   use zeroable::Zeroable;
 
-  use rules_account::account::interface::ERC1271_VALIDATED;
-  use rules_account::account::interface::IACCOUNT_ID;
+  // locals
   use rules_account::introspection::erc165::ERC165;
   use rules_account::utils::zeroable::U64Zeroable;
   use rules_account::utils::into::BoolIntoU8;
   use rules_account::utils::serde::SpanSerde;
-
+  use rules_account::account;
   use super::Call;
   use super::QUERY_VERSION;
   use super::TRANSACTION_VERSION;
@@ -160,7 +154,7 @@ mod Account {
   }
 
   //
-  // Init
+  // Constructor
   //
 
   #[constructor]
@@ -168,20 +162,123 @@ mod Account {
     _initializer(signer_public_key_, guardian_public_key_);
   }
 
-  #[internal]
-  fn _initializer(signer_public_key_: felt252, guardian_public_key_: felt252) {
-    ERC165::register_interface(IACCOUNT_ID);
-    _signer_public_key::write(signer_public_key_);
-    _guardian_public_key::write(guardian_public_key_);
+  //
+  // Interfaces impl
+  //
 
-    // Events
-    AccountInitialized(signer_public_key: signer_public_key_, guardian_public_key: guardian_public_key_);
+  impl Account of account::interface::IAccount {
+    fn get_signer_public_key() -> felt252 {
+      _signer_public_key::read()
+    }
+
+    fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32 {
+      if (_is_valid_signature(message, signature.span(), _signer_public_key::read())) {
+        account::interface::ERC1271_VALIDATED
+      } else {
+        0_u32
+      }
+    }
+
+    fn supports_interface(interface_id: u32) -> bool {
+      if (interface_id == account::interface::IACCOUNT_ID) {
+        true
+      } else {
+        ERC165::supports_interface(interface_id)
+      }
+    }
+
+    fn __execute__(calls: Array<Call>) -> Array<Span<felt252>> {
+      _execute_calls(:calls)
+    }
+
+    fn __validate__(calls: Array<Call>) -> felt252 {
+      _validate_transaction_with_calls(:calls)
+    }
+
+    fn __validate_declare__(class_hash: felt252) -> felt252 {
+      _validate_transaction()
+    }
+
+    fn set_signer_public_key(new_public_key: felt252) {
+      _signer_public_key::write(new_public_key);
+
+      // Events
+      SignerPublicKeyChanged(:new_public_key);
+    }
+  }
+
+  impl SecureAccount of account::interface::ISecureAccount {
+    fn get_guardian_public_key() -> felt252 {
+      _guardian_public_key::read()
+    }
+
+    fn get_signer_escape_activation_date() -> u64 {
+      _signer_escape_activation_date::read()
+    }
+
+    fn __validate_deploy__(
+      class_hash: felt252,
+      contract_address_salt: felt252,
+      signer_public_key_: felt252,
+      guardian_public_key_: felt252
+    ) -> felt252 {
+      _validate_transaction()
+    }
+
+    fn set_guardian_public_key(new_public_key: felt252) {
+      _guardian_public_key::write(new_public_key);
+
+      // Events
+      GuardianPublicKeyChanged(:new_public_key);
+    }
+
+    fn trigger_signer_escape() {
+      let block_timestamp = starknet::get_block_timestamp();
+      let active_date = block_timestamp + ESCAPE_SECURITY_PERIOD;
+
+      _signer_escape_activation_date::write(active_date);
+
+      // Events
+      SignerEscapeTriggered(active_at: active_date);
+    }
+
+    fn cancel_escape() {
+      let current_escape = _signer_escape_activation_date::read();
+      assert(current_escape.is_non_zero(), 'Account: no escape to cancel');
+
+      _signer_escape_activation_date::write(0);
+
+      // Events
+      EscapeCanceled();
+    }
+
+    fn escape_signer(new_public_key: felt252) {
+      // Check if an escape is active
+      let current_escape_activation_date = _signer_escape_activation_date::read();
+      let block_timestamp = starknet::get_block_timestamp();
+
+      assert(current_escape_activation_date.is_non_zero(), 'Account: no escape');
+      assert(current_escape_activation_date <= block_timestamp, 'Account: invalid escape');
+
+      // Clear escape
+      _signer_escape_activation_date::write(0);
+
+      // Check if new public key is valid
+      assert(new_public_key.is_non_zero(), 'Account: new pk cannot be null');
+
+      // Update signer public key
+      _signer_public_key::write(new_public_key);
+
+      // Events
+      SignerEscaped(:new_public_key);
+    }
   }
 
   //
   // Upgrade
   //
 
+  // TODO: use Upgradeable impl with more custom call after upgrade
   #[external]
   fn upgrade(new_implementation: starknet::ClassHash) {
     // Modifiers
@@ -190,8 +287,8 @@ mod Account {
     // Body
 
     // Check if new impl is an account
-    let mut calldata = ArrayTrait::<felt252>::new();
-    calldata.append(IACCOUNT_ID.into());
+    let mut calldata = ArrayTrait::new();
+    calldata.append(account::interface::IACCOUNT_ID.into());
 
     let ret_data = starknet::library_call_syscall(
       class_hash: new_implementation,
@@ -220,17 +317,17 @@ mod Account {
 
   #[view]
   fn get_signer_public_key() -> felt252 {
-    _signer_public_key::read()
+    Account::get_signer_public_key()
   }
 
   #[view]
   fn get_guardian_public_key() -> felt252 {
-    _guardian_public_key::read()
+    SecureAccount::get_guardian_public_key()
   }
 
   #[view]
   fn get_signer_escape_activation_date() -> u64 {
-    _signer_escape_activation_date::read()
+    SecureAccount::get_signer_escape_activation_date()
   }
 
   //
@@ -243,10 +340,7 @@ mod Account {
     _only_self();
 
     // Body
-    _signer_public_key::write(new_public_key);
-
-    // Events
-    SignerPublicKeyChanged(:new_public_key);
+    Account::set_signer_public_key(:new_public_key);
   }
 
   #[external]
@@ -255,10 +349,7 @@ mod Account {
     _only_self();
 
     // Body
-    _guardian_public_key::write(new_public_key);
-
-    // Events
-    GuardianPublicKeyChanged(:new_public_key);
+    SecureAccount::set_guardian_public_key(:new_public_key);
   }
 
   //
@@ -266,21 +357,17 @@ mod Account {
   //
 
   #[view]
-  fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32 {
-    if _is_valid_signature(message, signature.span(), _signer_public_key::read()) {
-      ERC1271_VALIDATED
-    } else {
-      0_u32
-    }
+  fn supports_interface(interface_id: u32) -> bool {
+    Account::supports_interface(interface_id)
   }
 
   #[view]
-  fn supports_interface(interface_id: u32) -> bool {
-    ERC165::supports_interface(interface_id)
+  fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32 {
+    Account::is_valid_signature(message, signature)
   }
 
   //
-  // Externals
+  // Account
   //
 
   #[external]
@@ -290,17 +377,17 @@ mod Account {
     _correct_tx_version();
 
     // Body
-    _execute_calls(calls)
+    Account::__execute__(calls)
   }
 
   #[external]
   fn __validate__(mut calls: Array<Call>) -> felt252 {
-    _validate_transaction_with_calls(calls)
+    Account::__validate__(:calls)
   }
 
   #[external]
   fn __validate_declare__(class_hash: felt252) -> felt252 {
-    _validate_transaction()
+    Account::__validate_declare__(:class_hash)
   }
 
   #[external]
@@ -310,10 +397,10 @@ mod Account {
     signer_public_key_: felt252,
     guardian_public_key_: felt252
   ) -> felt252 {
-    _validate_transaction()
+    SecureAccount::__validate_deploy__(:class_hash, :contract_address_salt, :signer_public_key_, :guardian_public_key_)
   }
 
-  // Escape
+  // Secure Account
 
   #[external]
   fn trigger_signer_escape() {
@@ -322,13 +409,7 @@ mod Account {
     _guardian_set();
 
     // Body
-    let block_timestamp = starknet::get_block_timestamp();
-    let active_date = block_timestamp + ESCAPE_SECURITY_PERIOD;
-
-    _signer_escape_activation_date::write(active_date);
-
-    // Events
-    SignerEscapeTriggered(active_at: active_date);
+    SecureAccount::trigger_signer_escape();
   }
 
   #[external]
@@ -337,13 +418,7 @@ mod Account {
     _only_self();
 
     // Body
-    let current_escape = _signer_escape_activation_date::read();
-    assert(current_escape.is_non_zero(), 'Account: no escape to cancel');
-
-    _signer_escape_activation_date::write(0);
-
-    // Events
-    EscapeCanceled();
+    SecureAccount::cancel_escape();
   }
 
   #[external]
@@ -353,30 +428,25 @@ mod Account {
     _guardian_set();
 
     // Body
-
-    // Check if an escape is active
-    let current_escape_activation_date = _signer_escape_activation_date::read();
-    let block_timestamp = starknet::get_block_timestamp();
-
-    assert(current_escape_activation_date.is_non_zero(), 'Account: no escape');
-    assert(current_escape_activation_date <= block_timestamp, 'Account: invalid escape');
-
-    // Clear escape
-    _signer_escape_activation_date::write(0);
-
-    // Check if new public key is valid
-    assert(new_public_key.is_non_zero(), 'Account: new pk cannot be null');
-
-    // Update signer public key
-    _signer_public_key::write(new_public_key);
-
-    // Events
-    SignerEscaped(:new_public_key);
+    SecureAccount::escape_signer(:new_public_key);
   }
 
   //
   // Internals
   //
+
+  // Init
+
+  #[internal]
+  fn _initializer(signer_public_key_: felt252, guardian_public_key_: felt252) {
+    _signer_public_key::write(signer_public_key_);
+    _guardian_public_key::write(guardian_public_key_);
+
+    // Events
+    AccountInitialized(signer_public_key: signer_public_key_, guardian_public_key: guardian_public_key_);
+  }
+
+  // Validate
 
   #[internal]
   fn _validate_transaction_with_calls(calls: Array<Call>) -> felt252 {
@@ -434,6 +504,8 @@ mod Account {
     }
   }
 
+  // Execute
+
   #[internal]
   fn _execute_calls(mut calls: Array<Call>) -> Array<Span<felt252>> {
     let mut res = ArrayTrait::new();
@@ -455,12 +527,5 @@ mod Account {
   fn _execute_single_call(call: Call) -> Span<felt252> {
     let Call{to, selector, calldata } = call;
     starknet::call_contract_syscall(to, selector, calldata.span()).unwrap_syscall()
-  }
-
-  #[internal]
-  fn _assert_no_self_calls(account_contract_address: starknet::ContractAddress, calls: Array<Call>) {
-    loop {
-
-    }
   }
 }
