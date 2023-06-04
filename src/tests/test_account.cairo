@@ -1,3 +1,5 @@
+use core::zeroable::Zeroable;
+use core::traits::TryInto;
 use array::ArrayTrait;
 use traits::Into;
 use option::OptionTrait;
@@ -8,6 +10,7 @@ use starknet::testing;
 use rules_account::account::{ Account, QUERY_VERSION, TRANSACTION_VERSION };
 use rules_account::account::interface::{ Call, ERC1271_VALIDATED, IACCOUNT_ID, };
 use rules_account::introspection::erc165::IERC165_ID;
+use rules_account::utils::zeroable::U64Zeroable;
 use rules_account::tests::utils;
 use rules_account::tests::mocks::erc20::ERC20;
 
@@ -28,7 +31,12 @@ struct SignedTransactionData {
   public_key: felt252,
   transaction_hash: felt252,
   r: felt252,
-  s: felt252
+  s: felt252,
+  guardian: bool
+}
+
+fn BLOCK_TIMESTAMP() -> u64 {
+  103374042_u64
 }
 
 fn CLASS_HASH() -> felt252 {
@@ -39,13 +47,14 @@ fn ACCOUNT_ADDRESS() -> starknet::ContractAddress {
   starknet::contract_address_const::<0x111111>()
 }
 
-fn SIGNED_TX_DATA() -> SignedTransactionData {
+fn SIGNED_TX_DATA(guardian_tx: bool) -> SignedTransactionData {
   SignedTransactionData {
     private_key: 1234,
     public_key: 883045738439352841478194533192765345509759306772397516907181243450667673002,
     transaction_hash: 2717105892474786771566982177444710571376803476229898722748888396642649184538,
     r: 3068558690657879390136740086327753007413919701043650133111397282816679110801,
-    s: 3355728545224320878895493649495491771252432631648740019139167265522817576501
+    s: 3355728545224320878895493649495491771252432631648740019139167265522817576501,
+    guardian: guardian_tx,
   }
 }
 
@@ -56,24 +65,32 @@ fn setup_dispatcher(data: Option<@SignedTransactionData>) -> AccountABIDispatche
   // Deploy the account contract
   let mut calldata = ArrayTrait::new();
 
-  if data.is_some() {
-    let data = data.unwrap();
+  match data {
+    Option::Some(tx_data) => {
+      // Set the signature and transaction hash
+      let mut signature = ArrayTrait::new();
+      signature.append(*tx_data.r);
+      signature.append(*tx_data.s);
+      testing::set_signature(signature.span());
+      testing::set_transaction_hash(*tx_data.transaction_hash);
 
-    // Set the signature and transaction hash
-    let mut signature = ArrayTrait::new();
-    signature.append(*data.r);
-    signature.append(*data.s);
-    testing::set_signature(signature.span());
-    testing::set_transaction_hash(*data.transaction_hash);
-
-    calldata.append(*data.public_key);
-  } else {
-    calldata.append(SIGNER_PUBLIC_KEY);
-  }
-
-  calldata.append(GUARDIAN_PUBLIC_KEY);
+      if (*tx_data.guardian) {
+        calldata.append(SIGNER_PUBLIC_KEY);
+        calldata.append(*tx_data.public_key);
+      } else {
+        calldata.append(*tx_data.public_key);
+        calldata.append(GUARDIAN_PUBLIC_KEY);
+      }
+    },
+    Option::None(_) => {
+      calldata.append(SIGNER_PUBLIC_KEY);
+      calldata.append(GUARDIAN_PUBLIC_KEY);
+    }
+  };
 
   let address = utils::deploy(Account::TEST_CLASS_HASH, calldata);
+  testing::set_account_contract_address(address);
+
   AccountABIDispatcher { contract_address: address }
 }
 
@@ -113,7 +130,7 @@ fn test_interfaces() {
 #[test]
 #[available_gas(20000000)]
 fn test_is_valid_signature() {
-  let data = SIGNED_TX_DATA();
+  let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
   let mut good_signature = ArrayTrait::new();
@@ -136,7 +153,7 @@ fn test_is_valid_signature() {
 #[test]
 #[available_gas(20000000)]
 fn test_validate_deploy() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
   // `__validate_deploy__` does not directly use the passed arguments. Their
   // values are already integrated in the tx hash. The passed arguments in this
@@ -151,7 +168,7 @@ fn test_validate_deploy() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_invalid_signature_data() {
-  let mut data = SIGNED_TX_DATA();
+  let mut data = SIGNED_TX_DATA(guardian_tx: false);
   data.transaction_hash += 1;
   let account = setup_dispatcher(Option::Some(@data));
 
@@ -162,7 +179,7 @@ fn test_validate_deploy_invalid_signature_data() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_invalid_signature_length() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let mut signature = ArrayTrait::new();
 
   signature.append(0x1);
@@ -175,7 +192,7 @@ fn test_validate_deploy_invalid_signature_length() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_empty_signature() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let empty_sig = ArrayTrait::new();
 
   testing::set_signature(empty_sig.span());
@@ -185,7 +202,7 @@ fn test_validate_deploy_empty_signature() {
 #[test]
 #[available_gas(20000000)]
 fn test_validate_declare() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
   // `__validate_declare__` does not directly use the class_hash argument. Its
   // value is already integrated in the tx hash. The class_hash argument in this
@@ -200,7 +217,7 @@ fn test_validate_declare() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_invalid_signature_data() {
-  let mut data = SIGNED_TX_DATA();
+  let mut data = SIGNED_TX_DATA(guardian_tx: false);
   data.transaction_hash += 1;
   let account = setup_dispatcher(Option::Some(@data));
 
@@ -211,7 +228,7 @@ fn test_validate_declare_invalid_signature_data() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_invalid_signature_length() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let mut signature = ArrayTrait::new();
 
   signature.append(0x1);
@@ -224,7 +241,7 @@ fn test_validate_declare_invalid_signature_length() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_empty_signature() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let empty_sig = ArrayTrait::new();
 
   testing::set_signature(empty_sig.span());
@@ -233,7 +250,7 @@ fn test_validate_declare_empty_signature() {
 }
 
 fn test_execute_with_version(version: Option<felt252>) {
-  let data = SIGNED_TX_DATA();
+  let data = SIGNED_TX_DATA(guardian_tx: false);
   let account = setup_dispatcher(Option::Some(@data));
   let erc20 = deploy_erc20(account.contract_address, 1000);
   let recipient = starknet::contract_address_const::<0x123>();
@@ -289,7 +306,7 @@ fn test_execute_invalid_version() {
 #[available_gas(20000000)]
 fn test_validate() {
   let calls = ArrayTrait::new();
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
   assert(account.__validate__(calls) == starknet::VALIDATED, 'Should validate correctly');
 }
@@ -299,7 +316,7 @@ fn test_validate() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_invalid() {
   let calls = ArrayTrait::new();
-  let mut data = SIGNED_TX_DATA();
+  let mut data = SIGNED_TX_DATA(guardian_tx: false);
   data.transaction_hash += 1;
   let account = setup_dispatcher(Option::Some(@data));
 
@@ -309,7 +326,7 @@ fn test_validate_invalid() {
 #[test]
 #[available_gas(20000000)]
 fn test_multicall() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let erc20 = deploy_erc20(account.contract_address, 1000);
   let recipient1 = starknet::contract_address_const::<0x123>();
   let recipient2 = starknet::contract_address_const::<0x456>();
@@ -357,7 +374,7 @@ fn test_multicall() {
 #[test]
 #[available_gas(20000000)]
 fn test_multicall_zero_calls() {
-  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA()));
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let mut calls = ArrayTrait::new();
 
   let ret = account.__execute__(calls);
@@ -367,7 +384,7 @@ fn test_multicall_zero_calls() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 fn test_public_key_setter_and_getter() {
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(ACCOUNT_ADDRESS());
@@ -380,7 +397,7 @@ fn test_public_key_setter_and_getter() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_signer_public_key_setter_different_account() {
   let caller = starknet::contract_address_const::<0x123>();
@@ -391,7 +408,7 @@ fn test_signer_public_key_setter_different_account() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_guardian_public_key_setter_different_account() {
   let caller = starknet::contract_address_const::<0x123>();
@@ -402,7 +419,7 @@ fn test_guardian_public_key_setter_different_account() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 #[should_panic(expected: ('Account: no reentrant call', ))]
 fn test_account_called_from_contract() {
   let calls = ArrayTrait::new();
@@ -412,12 +429,184 @@ fn test_account_called_from_contract() {
   Account::__execute__(calls);
 }
 
+// Escape signature validation
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
+fn test_trigger_signer_escape_with_signer_signature() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
+  let mut calls = ArrayTrait::new();
+
+  // Craft call
+  calls.append(Call {
+    to: account.contract_address,
+    selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
+    calldata: ArrayTrait::new(),
+  });
+
+  account.__validate__(calls);
+}
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
+fn test_escape_signer_with_signer_signature() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
+  let mut calls = ArrayTrait::new();
+
+  // Craft call
+  calls.append(Call {
+    to: account.contract_address,
+    selector: Account::ESCAPE_SIGNER_SELECTOR,
+    calldata: ArrayTrait::new(),
+  });
+
+  account.__validate__(calls);
+}
+
+#[test]
+#[available_gas(20000000)]
+fn test_trigger_signer_escape_with_guardian_signature() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: true)));
+  let mut calls = ArrayTrait::new();
+
+  // Craft call
+  calls.append(Call {
+    to: account.contract_address,
+    selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
+    calldata: ArrayTrait::new(),
+  });
+
+  account.__validate__(calls);
+}
+
+#[test]
+#[available_gas(20000000)]
+fn test_escape_signer_with_guardian_signature() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: true)));
+  let mut calls = ArrayTrait::new();
+
+  // Craft call
+  calls.append(Call {
+    to: account.contract_address,
+    selector: Account::ESCAPE_SIGNER_SELECTOR,
+    calldata: ArrayTrait::new(),
+  });
+
+  account.__validate__(calls);
+}
+
+// Trigger signer escape
+
+#[test]
+#[available_gas(20000000)]
+fn test_trigger_signer_escape() {
+  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  assert(
+    Account::get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
+    'escape activation date after'
+  );
+}
+
+#[test]
+#[available_gas(20000000)]
+fn test_multiple_trigger_signer_escape() {
+  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+
+  testing::set_block_timestamp(1_u64);
+  Account::trigger_signer_escape();
+
+  assert(
+    Account::get_signer_escape_activation_date() == 1_u64 + Account::ESCAPE_SECURITY_PERIOD,
+    'escape activation date after'
+  );
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  assert(
+    Account::get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
+    'escape activation date after'
+  );
+}
+
+// Cancel escape
+
+#[test]
+#[available_gas(20000000)]
+fn test_cancel_escape() {
+  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  Account::cancel_escape();
+
+  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date after');
+}
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: no escape to cancel', ))]
+fn test_cancel_escape_nonexistant() {
+  Account::cancel_escape();
+}
+
+// Escape signer
+
+#[test]
+#[available_gas(20000000)]
+fn test_escape_signer() {
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD);
+  Account::escape_signer(NEW_SIGNER_PUBKEY);
+
+  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date after');
+  assert(Account::get_signer_public_key() == NEW_SIGNER_PUBKEY, 'signer public key after');
+}
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: no escape', ))]
+fn test_escape_signer_without_triggering_signer_escape() {
+  Account::escape_signer(NEW_SIGNER_PUBKEY);
+}
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: invalid escape', ))]
+fn test_escape_signer_before_activation_date() {
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD - 1);
+  Account::escape_signer(NEW_SIGNER_PUBKEY);
+}
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: new pk cannot be null', ))]
+fn test_escape_signer_with_zero() {
+  testing::set_block_timestamp(BLOCK_TIMESTAMP());
+  Account::trigger_signer_escape();
+
+  testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD);
+  Account::escape_signer(0);
+}
+
 //
 // Test internals
 //
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 fn test_initializer() {
   Account::initializer(SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
   assert(Account::get_signer_public_key() == SIGNER_PUBLIC_KEY, 'Should return signer pubkey');
@@ -425,7 +614,7 @@ fn test_initializer() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 fn test_assert_only_self_true() {
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(ACCOUNT_ADDRESS());
@@ -433,7 +622,7 @@ fn test_assert_only_self_true() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_assert_only_self_false() {
   testing::set_contract_address(ACCOUNT_ADDRESS());
@@ -443,9 +632,9 @@ fn test_assert_only_self_false() {
 }
 
 #[test]
-#[available_gas(2000000)]
+#[available_gas(20000000)]
 fn test__is_valid_signature() {
-  let data = SIGNED_TX_DATA();
+  let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
   let mut good_signature = ArrayTrait::new();

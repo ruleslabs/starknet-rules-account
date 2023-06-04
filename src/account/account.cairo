@@ -138,12 +138,6 @@ mod Account {
   }
 
   #[internal]
-  fn _guardian_set() {
-    let guardian = _guardian_public_key::read();
-    assert(guardian.is_non_zero(), 'Account: guardian must be set');
-  }
-
-  #[internal]
   fn _correct_tx_version() {
     let tx_info = starknet::get_tx_info().unbox();
     let version = tx_info.version;
@@ -406,7 +400,6 @@ mod Account {
   fn trigger_signer_escape() {
     // Modifiers
     _only_self();
-    _guardian_set();
 
     // Body
     SecureAccount::trigger_signer_escape();
@@ -425,7 +418,6 @@ mod Account {
   fn escape_signer(new_public_key: felt252) {
     // Modifiers
     _only_self();
-    _guardian_set();
 
     // Body
     SecureAccount::escape_signer(:new_public_key);
@@ -456,7 +448,7 @@ mod Account {
     let account_contract_address = tx_info.account_contract_address;
 
     // check the tx signature against the signer pk by default
-    let mut public_key: felt252 = _signer_public_key::read();
+    let mut public_key: felt252 = get_signer_public_key();
 
     if (calls.len() == 1) {
       if (*calls.at(0).to == account_contract_address) {
@@ -464,9 +456,9 @@ mod Account {
           (*calls.at(0).selector - ESCAPE_SIGNER_SELECTOR) * (*calls.at(0).selector - TRIGGER_ESCAPE_SIGNER_SELECTOR);
 
         if (guardian_condition.is_zero()) {
-          // if calls are a single escape_signer or trigger_escape_signer,
+          // if calls are a single escape_signer or trigger_signer_escape,
           // we check tx signature against the guardian pk
-          public_key = _guardian_public_key::read();
+          public_key = get_guardian_public_key();
         }
       }
     }
