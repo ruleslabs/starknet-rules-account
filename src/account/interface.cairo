@@ -17,7 +17,7 @@ struct Call {
 trait IAccount {
   fn get_signer_public_key() -> felt252;
 
-  fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32;
+  fn is_valid_signature(message: felt252, signature: Span<felt252>) -> u32;
 
   fn supports_interface(interface_id: u32) -> bool;
 

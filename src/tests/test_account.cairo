@@ -143,10 +143,10 @@ fn test_is_valid_signature() {
 
   Account::set_signer_public_key(data.public_key);
 
-  let is_valid = Account::is_valid_signature(message, good_signature);
+  let is_valid = Account::is_valid_signature(message, good_signature.span());
   assert(is_valid == ERC1271_VALIDATED, 'Should accept valid signature');
 
-  let is_valid = Account::is_valid_signature(message, bad_signature);
+  let is_valid = Account::is_valid_signature(message, bad_signature.span());
   assert(is_valid == 0_u32, 'Should reject invalid signature');
 }
 

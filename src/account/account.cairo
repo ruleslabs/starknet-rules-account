@@ -13,7 +13,7 @@ trait AccountABI {
   fn get_signer_public_key() -> felt252;
 
   #[view]
-  fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32;
+  fn is_valid_signature(message: felt252, signature: Span<felt252>) -> u32;
 
   #[view]
   fn supports_interface(interface_id: u32) -> bool;
@@ -165,8 +165,8 @@ mod Account {
       _signer_public_key::read()
     }
 
-    fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32 {
-      if (_is_valid_signature(message, signature.span(), _signer_public_key::read())) {
+    fn is_valid_signature(message: felt252, signature: Span<felt252>) -> u32 {
+      if (_is_valid_signature(:message, :signature, public_key: _signer_public_key::read())) {
         account::interface::ERC1271_VALIDATED
       } else {
         0_u32
@@ -356,7 +356,7 @@ mod Account {
   }
 
   #[view]
-  fn is_valid_signature(message: felt252, signature: Array<felt252>) -> u32 {
+  fn is_valid_signature(message: felt252, signature: Span<felt252>) -> u32 {
     Account::is_valid_signature(message, signature)
   }
 
