@@ -5,6 +5,7 @@ use traits::Into;
 use option::OptionTrait;
 use serde::Serde;
 use starknet::testing;
+use starknet::class_hash::Felt252TryIntoClassHash;
 
 // locals
 use rules_account::account::{ Account, QUERY_VERSION, TRANSACTION_VERSION };
@@ -13,6 +14,7 @@ use rules_account::introspection::erc165::IERC165_ID;
 use rules_account::utils::zeroable::U64Zeroable;
 use rules_account::tests::utils;
 use rules_account::tests::mocks::erc20::ERC20;
+use rules_account::tests::mocks::upgrade::{ ValidUpgrade, InvalidUpgrade };
 
 // dispatchers
 use rules_account::tests::mocks::erc20::{ IERC20Dispatcher, IERC20DispatcherTrait };
@@ -23,6 +25,7 @@ const GUARDIAN_PUBLIC_KEY: felt252 = 'guardian public key';
 const NEW_SIGNER_PUBKEY: felt252 = 'new signer pubkey';
 const NEW_GUARDIAN_PUBKEY: felt252 = 'new guardian pubkey';
 const TRANSFER_SELECTOR: felt252 = 0x83afd3f4caedc6eebf44246fe54e38c95e3179a5ec9ea81740eca5b482d12e;
+const UPGRADE_SELECTOR: felt252 = 0xf2f7c15cbe06c8d94597cd91fd7f3369eae842359235712def5584f8d270cd;
 const SALT: felt252 = 'salt';
 
 #[derive(Drop)]
@@ -247,40 +250,6 @@ fn test_validate_declare_empty_signature() {
   testing::set_signature(empty_sig.span());
 
   account.__validate_declare__(CLASS_HASH());
-}
-
-fn test_execute_with_version(version: Option<felt252>) {
-  let data = SIGNED_TX_DATA(guardian_tx: false);
-  let account = setup_dispatcher(Option::Some(@data));
-  let erc20 = deploy_erc20(account.contract_address, 1000);
-  let recipient = starknet::contract_address_const::<0x123>();
-
-  // Craft call and add to calls array
-  let mut calldata = ArrayTrait::new();
-  let amount: u256 = 200;
-  calldata.append(recipient.into());
-  calldata.append(amount.low.into());
-  calldata.append(amount.high.into());
-  let call = Call { to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata };
-  let mut calls = ArrayTrait::new();
-  calls.append(call);
-
-  // Handle version for test
-  if version.is_some() {
-    testing::set_version(version.unwrap());
-  }
-
-  // Execute
-  let ret = account.__execute__(calls);
-
-  // Assert that the transfer was successful
-  assert(erc20.balance_of(account.contract_address) == 800, 'Should have remainder');
-  assert(erc20.balance_of(recipient) == amount, 'Should have transferred');
-
-  // Test return value
-  let mut call_serialized_retval = *ret.at(0);
-  let call_retval = Serde::<bool>::deserialize(ref call_serialized_retval);
-  assert(call_retval.unwrap(), 'Should have succeeded');
 }
 
 #[test]
@@ -601,6 +570,58 @@ fn test_escape_signer_with_zero() {
   Account::escape_signer(0);
 }
 
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: unauthorized', 'ENTRYPOINT_FAILED'))]
+fn test_upgrade_unauthorized() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
+
+  assert(!account.supports_interface(0xdead), 'interface support before');
+
+  account.upgrade(new_implementation: ValidUpgrade::TEST_CLASS_HASH.try_into().unwrap());
+
+  assert(account.supports_interface(0xdead), 'interface support after');
+}
+
+// replace syscall in test mode not available yet
+
+// #[test]
+// #[available_gas(20000000)]
+// fn test_upgrade_valid_implementation() {
+//   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
+
+//   let mut calldata = ArrayTrait::new();
+//   calldata.append(ValidUpgrade::TEST_CLASS_HASH);
+
+//   let call = Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+
+//   assert(!account.supports_interface(0xdead), 'interface support before');
+
+//   let mut calls = ArrayTrait::new();
+//   calls.append(call);
+
+//   account.__execute__(:calls);
+
+//   assert(account.supports_interface(0xdead), 'interface support after');
+// }
+
+#[test]
+#[available_gas(20000000)]
+#[should_panic(expected: ('Account: invalid implementation', ))]
+fn test_upgrade_invalid_implementation() {
+  let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
+
+  let mut calldata = ArrayTrait::new();
+  calldata.append(InvalidUpgrade::TEST_CLASS_HASH);
+
+  let call = Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+
+  let mut calls = ArrayTrait::new();
+  calls.append(call);
+
+  account.__execute__(:calls);
+}
+
 //
 // Test internals
 //
@@ -658,4 +679,42 @@ fn test__is_valid_signature() {
 
   let is_valid = Account::_is_valid_signature(message, invalid_length_signature.span(), data.public_key);
   assert(!is_valid, 'Should reject invalid length');
+}
+
+//
+// Helpers
+//
+
+fn test_execute_with_version(version: Option<felt252>) {
+  let data = SIGNED_TX_DATA(guardian_tx: false);
+  let account = setup_dispatcher(Option::Some(@data));
+  let erc20 = deploy_erc20(account.contract_address, 1000);
+  let recipient = starknet::contract_address_const::<0x123>();
+
+  // Craft call and add to calls array
+  let mut calldata = ArrayTrait::new();
+  let amount: u256 = 200;
+  calldata.append(recipient.into());
+  calldata.append(amount.low.into());
+  calldata.append(amount.high.into());
+  let call = Call { to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata };
+  let mut calls = ArrayTrait::new();
+  calls.append(call);
+
+  // Handle version for test
+  if version.is_some() {
+    testing::set_version(version.unwrap());
+  }
+
+  // Execute
+  let ret = account.__execute__(calls);
+
+  // Assert that the transfer was successful
+  assert(erc20.balance_of(account.contract_address) == 800, 'Should have remainder');
+  assert(erc20.balance_of(recipient) == amount, 'Should have transferred');
+
+  // Test return value
+  let mut call_serialized_retval = *ret.at(0);
+  let call_retval = Serde::<bool>::deserialize(ref call_serialized_retval);
+  assert(call_retval.unwrap(), 'Should have succeeded');
 }

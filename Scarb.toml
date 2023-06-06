@@ -11,3 +11,4 @@ name = "rules_account"
 starknet = ">=1.0.0"
 
 [[target.starknet-contract]]
+allowed-libfuncs-list.name = "experimental_v0.1.0"

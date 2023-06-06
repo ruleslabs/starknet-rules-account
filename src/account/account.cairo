@@ -66,8 +66,7 @@ mod Account {
     823970870440803648323000253851988489761099050950583820081611025987402410277;
   const ESCAPE_SIGNER_SELECTOR: felt252 =
     578307412324655990419134484880427622068887477430675222732446709420063579565;
-  const SUPPORTS_INTERFACE_SELECTOR: felt252 =
-    1184015894760294494673613438913361435336722154500302038630992932234692784845;
+  const SUPPORTS_INTERFACE_SELECTOR: felt252 = 0xfe80f537b66d12a00b6d3c072b44afbb716e78dde5c3f0ef116ee93d3e3283;
 
   const CONTRACT_VERSION: felt252 = '1.0.0';
   const ESCAPE_SECURITY_PERIOD: u64 = 259200; // 3d * 24h * 60m * 60s
@@ -290,8 +289,10 @@ mod Account {
       calldata: calldata.span()
     ).unwrap_syscall();
 
-    assert(ret_data.len() == 1, 'Account: invalid implementation');
-    assert(*ret_data.at(0) == Into::<bool, u8>::into(true).into(), 'Account: invalid implementation');
+    assert(
+      ret_data.len() == 1 & *ret_data.at(0) == Into::<bool, u8>::into(true).into(),
+      'Account: invalid implementation'
+    );
 
     // set new impl
     starknet::replace_class_syscall(new_implementation);
