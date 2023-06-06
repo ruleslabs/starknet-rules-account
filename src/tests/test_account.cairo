@@ -607,7 +607,7 @@ fn test_upgrade_unauthorized() {
 
 #[test]
 #[available_gas(20000000)]
-#[should_panic(expected: ('Account: invalid implementation', ))]
+#[should_panic(expected: ('Account: invalid implementation', 'ENTRYPOINT_FAILED', 'ENTRYPOINT_FAILED'))]
 fn test_upgrade_invalid_implementation() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
