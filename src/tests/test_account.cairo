@@ -38,6 +38,15 @@ struct SignedTransactionData {
   guardian: bool
 }
 
+fn SIGNER_AND_GUARDIAN_PUBLIC_KEYS() -> Array<felt252> {
+  let mut calldata = ArrayTrait::new();
+
+  calldata.append(SIGNER_PUBLIC_KEY);
+  calldata.append(GUARDIAN_PUBLIC_KEY);
+
+  calldata
+}
+
 fn BLOCK_TIMESTAMP() -> u64 {
   103374042_u64
 }
@@ -161,8 +170,9 @@ fn test_validate_deploy() {
   // `__validate_deploy__` does not directly use the passed arguments. Their
   // values are already integrated in the tx hash. The passed arguments in this
   // testing context are decoupled from the signature and have no effect on the test.
+
   assert(
-    account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY) == starknet::VALIDATED,
+    account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_AND_GUARDIAN_PUBLIC_KEYS()) == starknet::VALIDATED,
     'Should validate correctly'
   );
 }
@@ -175,7 +185,7 @@ fn test_validate_deploy_invalid_signature_data() {
   data.transaction_hash += 1;
   let account = setup_dispatcher(Option::Some(@data));
 
-  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_AND_GUARDIAN_PUBLIC_KEYS());
 }
 
 #[test]
@@ -188,7 +198,7 @@ fn test_validate_deploy_invalid_signature_length() {
   signature.append(0x1);
   testing::set_signature(signature.span());
 
-  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_AND_GUARDIAN_PUBLIC_KEYS());
 }
 
 #[test]
@@ -199,7 +209,7 @@ fn test_validate_deploy_empty_signature() {
   let empty_sig = ArrayTrait::new();
 
   testing::set_signature(empty_sig.span());
-  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_AND_GUARDIAN_PUBLIC_KEYS());
 }
 
 #[test]
