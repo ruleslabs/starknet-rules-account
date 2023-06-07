@@ -1,7 +1,6 @@
-use core::zeroable::Zeroable;
-use core::traits::TryInto;
-use array::ArrayTrait;
-use traits::Into;
+use zeroable::Zeroable;
+use array::{ ArrayTrait, SpanTrait };
+use traits::{ Into, TryInto };
 use option::OptionTrait;
 use serde::Serde;
 use starknet::testing;

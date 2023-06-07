@@ -1,5 +1,6 @@
 use array::Array;
 
+// locals
 use rules_account::account::interface::Call;
 use rules_account::utils::serde::SpanSerde;
 
@@ -502,6 +503,7 @@ mod Account {
   #[internal]
   fn _execute_calls(mut calls: Array<Call>) -> Array<Span<felt252>> {
     let mut res = ArrayTrait::new();
+
     loop {
       match calls.pop_front() {
         Option::Some(call) => {
@@ -513,6 +515,7 @@ mod Account {
         },
       };
     };
+
     res
   }
 
