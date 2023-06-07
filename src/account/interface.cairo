@@ -27,8 +27,6 @@ trait IAccount {
 
   fn __validate_declare__(class_hash: felt252) -> felt252;
 
-  fn __validate_deploy__(class_hash: felt252, contract_address_salt: felt252, calldata: Array<felt252>) -> felt252;
-
   fn set_signer_public_key(new_public_key: felt252);
 }
 
@@ -37,6 +35,13 @@ trait ISecureAccount {
   fn get_guardian_public_key() -> felt252;
 
   fn get_signer_escape_activation_date() -> u64;
+
+  fn __validate_deploy__(
+    class_hash: felt252,
+    contract_address_salt: felt252,
+    signer_public_key_: felt252,
+    guardian_public_key_: felt252
+  ) -> felt252;
 
   fn set_guardian_public_key(new_public_key: felt252);
 

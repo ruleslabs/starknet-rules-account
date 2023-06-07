@@ -34,7 +34,8 @@ trait AccountABI {
   fn __validate_deploy__(
     class_hash: felt252,
     contract_address_salt: felt252,
-    calldata: Array<felt252>
+    signer_public_key_: felt252,
+    guardian_public_key_: felt252
   ) -> felt252;
 
   #[external]
@@ -191,10 +192,6 @@ mod Account {
       _validate_transaction()
     }
 
-    fn __validate_deploy__(class_hash: felt252, contract_address_salt: felt252, calldata: Array<felt252>) -> felt252 {
-      _validate_transaction()
-    }
-
     fn set_signer_public_key(new_public_key: felt252) {
       _signer_public_key::write(new_public_key);
 
@@ -210,6 +207,15 @@ mod Account {
 
     fn get_signer_escape_activation_date() -> u64 {
       _signer_escape_activation_date::read()
+    }
+
+    fn __validate_deploy__(
+      class_hash: felt252,
+      contract_address_salt: felt252,
+      signer_public_key_: felt252,
+      guardian_public_key_: felt252
+    ) -> felt252 {
+      _validate_transaction()
     }
 
     fn set_guardian_public_key(new_public_key: felt252) {
@@ -380,8 +386,13 @@ mod Account {
   }
 
   #[external]
-  fn __validate_deploy__(class_hash: felt252, contract_address_salt: felt252, calldata: Array<felt252>) -> felt252 {
-    Account::__validate_deploy__(:class_hash, :contract_address_salt, :calldata)
+  fn __validate_deploy__(
+    class_hash: felt252,
+    contract_address_salt: felt252,
+    signer_public_key_: felt252,
+    guardian_public_key_: felt252
+  ) -> felt252 {
+    SecureAccount::__validate_deploy__(:class_hash, :contract_address_salt, :signer_public_key_, :guardian_public_key_)
   }
 
   // Secure Account
