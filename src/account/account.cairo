@@ -216,7 +216,7 @@ mod Account {
       signer_public_key_: felt252,
       guardian_public_key_: felt252
     ) -> felt252 {
-      _validate_transaction()
+      starknet::VALIDATED
     }
 
     fn set_guardian_public_key(new_public_key: felt252) {

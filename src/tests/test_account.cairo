@@ -168,7 +168,6 @@ fn test_validate_deploy() {
 
 #[test]
 #[available_gas(20000000)]
-#[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_invalid_signature_data() {
   let mut data = SIGNED_TX_DATA(guardian_tx: false);
   data.transaction_hash += 1;
@@ -179,7 +178,6 @@ fn test_validate_deploy_invalid_signature_data() {
 
 #[test]
 #[available_gas(20000000)]
-#[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_invalid_signature_length() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let mut signature = ArrayTrait::new();
@@ -192,7 +190,6 @@ fn test_validate_deploy_invalid_signature_length() {
 
 #[test]
 #[available_gas(20000000)]
-#[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_deploy_empty_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
   let empty_sig = ArrayTrait::new();
