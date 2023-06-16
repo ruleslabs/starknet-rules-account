@@ -15,4 +15,4 @@ starknet = ">=1.0.0"
 sierra = true
 
 # Enable CASM codegen.
-casm = false
+casm = true
