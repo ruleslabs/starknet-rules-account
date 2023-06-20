@@ -2,7 +2,7 @@ use array::Array;
 
 // locals
 use rules_account::account::interface::Call;
-use rules_account::utils::serde::SpanSerde;
+use rules_utils::utils::serde::SpanSerde;
 
 const TRANSACTION_VERSION: felt252 = 1;
 // 2 ** 128 + TRANSACTION_VERSION
@@ -55,9 +55,9 @@ mod Account {
 
   // locals
   use rules_account::introspection::erc165::ERC165;
-  use rules_account::utils::zeroable::U64Zeroable;
-  use rules_account::utils::into::BoolIntoU8;
-  use rules_account::utils::serde::SpanSerde;
+  use rules_utils::utils::zeroable::U64Zeroable;
+  use rules_utils::utils::into::BoolIntoU8;
+  use rules_utils::utils::serde::SpanSerde;
   use rules_account::account;
   use super::Call;
   use super::QUERY_VERSION;

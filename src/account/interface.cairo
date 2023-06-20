@@ -1,7 +1,7 @@
 use array::ArrayTrait;
 use array::SpanTrait;
 use starknet::ContractAddress;
-use rules_account::utils::serde::SpanSerde;
+use rules_utils::utils::serde::SpanSerde;
 
 const IACCOUNT_ID: u32 = 0xa66bd575_u32;
 const ERC1271_VALIDATED: u32 = 0x1626ba7e_u32;

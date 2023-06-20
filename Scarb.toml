@@ -8,6 +8,7 @@ name = "rules_account"
 # See more keys and their definitions at https://docs.swmansion.com/scarb/docs/reference/manifest
 
 [dependencies]
+rules_utils = { git = "https://github.com/ruleslabs/starknet-utils.git" }
 starknet = ">=1.0.0"
 
 [[target.starknet-contract]]
