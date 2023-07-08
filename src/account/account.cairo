@@ -51,7 +51,7 @@ mod Account {
   use integer::U64Zeroable;
 
   // locals
-  use rules_account::introspection::erc165::{ ERC165, IERC165Dispatcher, IERC165DispatcherTrait };
+  use rules_account::introspection::erc165::{ ERC165 };
   use rules_utils::utils::into::BoolIntoU8;
   use rules_account::account;
   use super::{ QUERY_VERSION, TRANSACTION_VERSION };
@@ -105,22 +105,22 @@ mod Account {
 
   #[derive(Drop, starknet::Event)]
   struct SignerPublicKeyChanged {
-    new_public_key: felt252
+    new_public_key: felt252,
   }
 
   #[derive(Drop, starknet::Event)]
   struct GuardianPublicKeyChanged {
-    new_public_key: felt252
+    new_public_key: felt252,
   }
 
   #[derive(Drop, starknet::Event)]
   struct SignerEscapeTriggered {
-    active_at: u64
+    active_at: u64,
   }
 
   #[derive(Drop, starknet::Event)]
   struct SignerEscaped {
-    new_public_key: felt252
+    new_public_key: felt252,
   }
 
   #[derive(Drop, starknet::Event)]

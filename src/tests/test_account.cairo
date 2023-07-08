@@ -143,6 +143,8 @@ fn test_interfaces() {
 #[test]
 #[available_gas(20000000)]
 fn test_is_valid_signature() {
+  let mut account = Account::contract_state_for_testing();
+
   let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
@@ -154,22 +156,14 @@ fn test_is_valid_signature() {
   bad_signature.append(0x987);
   bad_signature.append(0x564);
 
-  Account::__external::set_signer_public_key(utils::serialized_element(data.public_key));
+  account.set_signer_public_key(data.public_key);
 
   // Test good signature
-  let mut retdata = Account::__external::is_valid_signature(
-    utils::serialized_element((message, good_signature.span()))
-  );
-  let is_valid = utils::single_deserialize(ref retdata);
-
+  let is_valid = account.is_valid_signature(message, good_signature.span());
   assert(is_valid == ERC1271_VALIDATED, 'Should accept valid signature');
 
   // Test bad signature
-  retdata = Account::__external::is_valid_signature(
-    utils::serialized_element((message, bad_signature.span()))
-  );
-  let is_valid = utils::single_deserialize(ref retdata);
-
+  let is_valid = account.is_valid_signature(message, bad_signature.span());
   assert(is_valid == 0_u32, 'Should reject invalid signature');
 }
 
