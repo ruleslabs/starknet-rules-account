@@ -1,21 +1,27 @@
-#[account_contract]
+#[starknet::contract]
 mod ValidUpgrade {
-  #[constructor]
-  fn constructor() {}
+  #[storage]
+  struct Storage { }
 
-  #[view]
-  fn supports_interface(interface_id: u32) -> bool {
+  #[constructor]
+  fn constructor(ref self: ContractState) {}
+
+  #[external(v0)]
+  fn supports_interface(self: @ContractState, interface_id: u32) -> bool {
     true
   }
 }
 
-#[account_contract]
+#[starknet::contract]
 mod InvalidUpgrade {
-  #[constructor]
-  fn constructor() {}
+  #[storage]
+  struct Storage { }
 
-  #[view]
-  fn supports_interface(interface_id: u32) -> bool {
+  #[constructor]
+  fn constructor(ref self: ContractState) {}
+
+  #[external(v0)]
+  fn supports_interface(self: @ContractState, interface_id: u32) -> bool {
     false
   }
 }

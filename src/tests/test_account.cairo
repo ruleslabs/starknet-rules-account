@@ -5,12 +5,13 @@ use option::OptionTrait;
 use serde::Serde;
 use starknet::testing;
 use starknet::class_hash::Felt252TryIntoClassHash;
+use integer::U64Zeroable;
 
 // locals
 use rules_account::account::{ Account, QUERY_VERSION, TRANSACTION_VERSION };
-use rules_account::account::interface::{ Call, ERC1271_VALIDATED, IACCOUNT_ID, };
+use rules_account::account::Account::{ ModifierTrait, HelperTrait };
+use rules_account::account::interface::{ IAccount, ISecureAccount, ERC1271_VALIDATED, IACCOUNT_ID, };
 use rules_account::introspection::erc165::IERC165_ID;
-use rules_utils::utils::zeroable::U64Zeroable;
 use rules_account::tests::utils;
 use rules_account::tests::mocks::erc20::ERC20;
 use rules_account::tests::mocks::upgrade::{ ValidUpgrade, InvalidUpgrade };
@@ -114,19 +115,29 @@ fn deploy_erc20(recipient: starknet::ContractAddress, initial_supply: u256) -> I
 #[test]
 #[available_gas(20000000)]
 fn test_constructor() {
-  Account::constructor(SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  let mut account = Account::contract_state_for_testing();
 
-  assert(Account::get_signer_public_key() == SIGNER_PUBLIC_KEY, 'Should return signer pubkey');
-  assert(Account::get_guardian_public_key() == GUARDIAN_PUBLIC_KEY, 'Should return guardian pubkey');
+  account.initializer(signer_public_key_: SIGNER_PUBLIC_KEY, guardian_public_key_: GUARDIAN_PUBLIC_KEY);
+
+  assert(
+    account.get_signer_public_key() == SIGNER_PUBLIC_KEY,
+    'Should return signer pubkey'
+  );
+  assert(
+    account.get_guardian_public_key() == GUARDIAN_PUBLIC_KEY,
+    'Should return guardian pubkey'
+  );
 }
 
 #[test]
 #[available_gas(20000000)]
 fn test_interfaces() {
-  Account::constructor(SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  let mut account = Account::contract_state_for_testing();
 
-  assert(Account::supports_interface(IERC165_ID), 'Should support base interface');
-  assert(Account::supports_interface(IACCOUNT_ID), 'Should support account id');
+  account.initializer(signer_public_key_: SIGNER_PUBLIC_KEY, guardian_public_key_: GUARDIAN_PUBLIC_KEY);
+
+  assert(account.supports_interface(IERC165_ID), 'Should support base interface');
+  assert(account.supports_interface(IACCOUNT_ID), 'Should support account id');
 }
 
 #[test]
@@ -143,12 +154,22 @@ fn test_is_valid_signature() {
   bad_signature.append(0x987);
   bad_signature.append(0x564);
 
-  Account::set_signer_public_key(data.public_key);
+  Account::__external::set_signer_public_key(utils::serialized_element(data.public_key));
 
-  let is_valid = Account::is_valid_signature(message, good_signature.span());
+  // Test good signature
+  let mut retdata = Account::__external::is_valid_signature(
+    utils::serialized_element((message, good_signature.span()))
+  );
+  let is_valid = utils::single_deserialize(ref retdata);
+
   assert(is_valid == ERC1271_VALIDATED, 'Should accept valid signature');
 
-  let is_valid = Account::is_valid_signature(message, bad_signature.span());
+  // Test bad signature
+  retdata = Account::__external::is_valid_signature(
+    utils::serialized_element((message, bad_signature.span()))
+  );
+  let is_valid = utils::single_deserialize(ref retdata);
+
   assert(is_valid == 0_u32, 'Should reject invalid signature');
 }
 
@@ -303,7 +324,7 @@ fn test_multicall() {
   calldata1.append(recipient1.into());
   calldata1.append(amount1.low.into());
   calldata1.append(amount1.high.into());
-  let call1 = Call {
+  let call1 = starknet::account::Call {
     to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata1
   };
 
@@ -313,7 +334,7 @@ fn test_multicall() {
   calldata2.append(recipient2.into());
   calldata2.append(amount2.low.into());
   calldata2.append(amount2.high.into());
-  let call2 = Call {
+  let call2 = starknet::account::Call {
     to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata2
   };
 
@@ -351,47 +372,55 @@ fn test_multicall_zero_calls() {
 #[test]
 #[available_gas(20000000)]
 fn test_public_key_setter_and_getter() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(ACCOUNT_ADDRESS());
 
-  Account::set_signer_public_key(NEW_SIGNER_PUBKEY);
-  Account::set_guardian_public_key(NEW_GUARDIAN_PUBKEY);
+  account.set_signer_public_key(NEW_SIGNER_PUBKEY);
+  account.set_guardian_public_key(NEW_GUARDIAN_PUBKEY);
 
-  assert(Account::get_signer_public_key() == NEW_SIGNER_PUBKEY, 'Should update signer key');
-  assert(Account::get_guardian_public_key() == NEW_GUARDIAN_PUBKEY, 'Should update guardian key');
+  assert(account.get_signer_public_key() == NEW_SIGNER_PUBKEY, 'Should update signer key');
+  assert(account.get_guardian_public_key() == NEW_GUARDIAN_PUBKEY, 'Should update guardian key');
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_signer_public_key_setter_different_account() {
+  let mut account = Account::contract_state_for_testing();
+
   let caller = starknet::contract_address_const::<0x123>();
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(caller);
 
-  Account::set_signer_public_key(NEW_SIGNER_PUBKEY);
+  account.set_signer_public_key(NEW_SIGNER_PUBKEY);
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_guardian_public_key_setter_different_account() {
+  let mut account = Account::contract_state_for_testing();
+
   let caller = starknet::contract_address_const::<0x123>();
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(caller);
 
-  Account::set_guardian_public_key(NEW_GUARDIAN_PUBKEY);
+  account.set_guardian_public_key(NEW_GUARDIAN_PUBKEY);
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: no reentrant call', ))]
 fn test_account_called_from_contract() {
+  let mut account = Account::contract_state_for_testing();
+
   let calls = ArrayTrait::new();
   let caller = starknet::contract_address_const::<0x123>();
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(caller);
-  Account::__execute__(calls);
+  account.__execute__(calls);
 }
 
 // Escape signature validation
@@ -404,7 +433,7 @@ fn test_trigger_signer_escape_with_signer_signature() {
   let mut calls = ArrayTrait::new();
 
   // Craft call
-  calls.append(Call {
+  calls.append(starknet::account::Call {
     to: account.contract_address,
     selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
     calldata: ArrayTrait::new(),
@@ -421,7 +450,7 @@ fn test_escape_signer_with_signer_signature() {
   let mut calls = ArrayTrait::new();
 
   // Craft call
-  calls.append(Call {
+  calls.append(starknet::account::Call {
     to: account.contract_address,
     selector: Account::ESCAPE_SIGNER_SELECTOR,
     calldata: ArrayTrait::new(),
@@ -437,7 +466,7 @@ fn test_trigger_signer_escape_with_guardian_signature() {
   let mut calls = ArrayTrait::new();
 
   // Craft call
-  calls.append(Call {
+  calls.append(starknet::account::Call {
     to: account.contract_address,
     selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
     calldata: ArrayTrait::new(),
@@ -453,7 +482,7 @@ fn test_escape_signer_with_guardian_signature() {
   let mut calls = ArrayTrait::new();
 
   // Craft call
-  calls.append(Call {
+  calls.append(starknet::account::Call {
     to: account.contract_address,
     selector: Account::ESCAPE_SIGNER_SELECTOR,
     calldata: ArrayTrait::new(),
@@ -467,13 +496,15 @@ fn test_escape_signer_with_guardian_signature() {
 #[test]
 #[available_gas(20000000)]
 fn test_trigger_signer_escape() {
-  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+  let mut account = Account::contract_state_for_testing();
+
+  assert(account.get_signer_escape_activation_date().is_zero(), 'escape activation date before');
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   assert(
-    Account::get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
+    account.get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
     'escape activation date after'
   );
 }
@@ -481,21 +512,23 @@ fn test_trigger_signer_escape() {
 #[test]
 #[available_gas(20000000)]
 fn test_multiple_trigger_signer_escape() {
-  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+  let mut account = Account::contract_state_for_testing();
+
+  assert(account.get_signer_escape_activation_date().is_zero(), 'escape activation date before');
 
   testing::set_block_timestamp(1_u64);
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   assert(
-    Account::get_signer_escape_activation_date() == 1_u64 + Account::ESCAPE_SECURITY_PERIOD,
+    account.get_signer_escape_activation_date() == 1_u64 + Account::ESCAPE_SECURITY_PERIOD,
     'escape activation date after'
   );
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   assert(
-    Account::get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
+    account.get_signer_escape_activation_date() == BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD,
     'escape activation date after'
   );
 }
@@ -505,21 +538,25 @@ fn test_multiple_trigger_signer_escape() {
 #[test]
 #[available_gas(20000000)]
 fn test_cancel_escape() {
-  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date before');
+  let mut account = Account::contract_state_for_testing();
+
+  assert(account.get_signer_escape_activation_date().is_zero(), 'escape activation date before');
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
-  Account::cancel_escape();
+  account.cancel_escape();
 
-  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date after');
+  assert(account.get_signer_escape_activation_date().is_zero(), 'escape activation date after');
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: no escape to cancel', ))]
 fn test_cancel_escape_nonexistant() {
-  Account::cancel_escape();
+  let mut account = Account::contract_state_for_testing();
+
+  account.cancel_escape();
 }
 
 // Escape signer
@@ -527,43 +564,51 @@ fn test_cancel_escape_nonexistant() {
 #[test]
 #[available_gas(20000000)]
 fn test_escape_signer() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD);
-  Account::escape_signer(NEW_SIGNER_PUBKEY);
+  account.escape_signer(NEW_SIGNER_PUBKEY);
 
-  assert(Account::get_signer_escape_activation_date().is_zero(), 'escape activation date after');
-  assert(Account::get_signer_public_key() == NEW_SIGNER_PUBKEY, 'signer public key after');
+  assert(account.get_signer_escape_activation_date().is_zero(), 'escape activation date after');
+  assert(account.get_signer_public_key() == NEW_SIGNER_PUBKEY, 'signer public key after');
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: no escape', ))]
 fn test_escape_signer_without_triggering_signer_escape() {
-  Account::escape_signer(NEW_SIGNER_PUBKEY);
+  let mut account = Account::contract_state_for_testing();
+
+  account.escape_signer(NEW_SIGNER_PUBKEY);
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid escape', ))]
 fn test_escape_signer_before_activation_date() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD - 1);
-  Account::escape_signer(NEW_SIGNER_PUBKEY);
+  account.escape_signer(NEW_SIGNER_PUBKEY);
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: new pk cannot be null', ))]
 fn test_escape_signer_with_zero() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_block_timestamp(BLOCK_TIMESTAMP());
-  Account::trigger_signer_escape();
+  account.trigger_signer_escape();
 
   testing::set_block_timestamp(BLOCK_TIMESTAMP() + Account::ESCAPE_SECURITY_PERIOD);
-  Account::escape_signer(0);
+  account.escape_signer(0);
 }
 
 #[test]
@@ -589,7 +634,7 @@ fn test_upgrade_unauthorized() {
 //   let mut calldata = ArrayTrait::new();
 //   calldata.append(ValidUpgrade::TEST_CLASS_HASH);
 
-//   let call = Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+//   let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
 
 //   assert(!account.supports_interface(0xdead), 'interface support before');
 
@@ -610,7 +655,7 @@ fn test_upgrade_invalid_implementation() {
   let mut calldata = ArrayTrait::new();
   calldata.append(InvalidUpgrade::TEST_CLASS_HASH);
 
-  let call = Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+  let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
 
   let mut calls = ArrayTrait::new();
   calls.append(call);
@@ -625,32 +670,40 @@ fn test_upgrade_invalid_implementation() {
 #[test]
 #[available_gas(20000000)]
 fn test_initializer() {
-  Account::initializer(SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
-  assert(Account::get_signer_public_key() == SIGNER_PUBLIC_KEY, 'Should return signer pubkey');
-  assert(Account::get_guardian_public_key() == GUARDIAN_PUBLIC_KEY, 'Should return guardian pubkey');
+  let mut account = Account::contract_state_for_testing();
+
+  account.initializer(SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
+  assert(account.get_signer_public_key() == SIGNER_PUBLIC_KEY, 'Should return signer pubkey');
+  assert(account.get_guardian_public_key() == GUARDIAN_PUBLIC_KEY, 'Should return guardian pubkey');
 }
 
 #[test]
 #[available_gas(20000000)]
 fn test_assert_only_self_true() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(ACCOUNT_ADDRESS());
-  Account::_only_self();
+  account._only_self();
 }
 
 #[test]
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: unauthorized', ))]
 fn test_assert_only_self_false() {
+  let mut account = Account::contract_state_for_testing();
+
   testing::set_contract_address(ACCOUNT_ADDRESS());
   let other = starknet::contract_address_const::<0x4567>();
   testing::set_caller_address(other);
-  Account::_only_self();
+  account._only_self();
 }
 
 #[test]
 #[available_gas(20000000)]
 fn test__is_valid_signature() {
+  let mut account = Account::contract_state_for_testing();
+
   let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
@@ -665,15 +718,15 @@ fn test__is_valid_signature() {
   let mut invalid_length_signature = ArrayTrait::new();
   invalid_length_signature.append(0x987);
 
-  Account::set_signer_public_key(data.public_key);
+  account.set_signer_public_key(data.public_key);
 
-  let is_valid = Account::_is_valid_signature(message, good_signature.span(), data.public_key);
+  let is_valid = account._is_valid_signature(message, good_signature.span(), data.public_key);
   assert(is_valid, 'Should accept valid signature');
 
-  let is_valid = Account::_is_valid_signature(message, bad_signature.span(), data.public_key);
+  let is_valid = account._is_valid_signature(message, bad_signature.span(), data.public_key);
   assert(!is_valid, 'Should reject invalid signature');
 
-  let is_valid = Account::_is_valid_signature(message, invalid_length_signature.span(), data.public_key);
+  let is_valid = account._is_valid_signature(message, invalid_length_signature.span(), data.public_key);
   assert(!is_valid, 'Should reject invalid length');
 }
 
@@ -693,7 +746,7 @@ fn test_execute_with_version(version: Option<felt252>) {
   calldata.append(recipient.into());
   calldata.append(amount.low.into());
   calldata.append(amount.high.into());
-  let call = Call { to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata };
+  let call = starknet::account::Call { to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata };
   let mut calls = ArrayTrait::new();
   calls.append(call);
 

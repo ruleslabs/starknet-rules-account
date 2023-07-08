@@ -9,11 +9,8 @@ name = "rules_account"
 
 [dependencies]
 rules_utils = { git = "https://github.com/ruleslabs/starknet-utils.git" }
-starknet = ">=1.0.0"
+starknet = "2.0.0-rc3"
 
 [[target.starknet-contract]]
 # Enable Sierra codegen.
 sierra = true
-
-# Enable CASM codegen.
-casm = true
