@@ -50,13 +50,12 @@ mod ERC20 {
   #[constructor]
   fn constructor(
     ref self: ContractState,
-    name: felt252,
-    symbol: felt252,
+    name_: felt252,
+    symbol_: felt252,
     initial_supply: u256,
     recipient: starknet::ContractAddress
   ) {
-    self.initializer(name, symbol);
-    self._mint(recipient, initial_supply);
+    self.initializer(:name_, :symbol_, :initial_supply, :recipient);
   }
 
   #[external(v0)]
@@ -124,9 +123,17 @@ mod ERC20 {
 
   #[generate_trait]
   impl HelperImpl of HelperTrait {
-    fn initializer(ref self: ContractState, name_: felt252, symbol_: felt252) {
+    fn initializer(
+    ref self: ContractState,
+    name_: felt252,
+    symbol_: felt252,
+    initial_supply: u256,
+    recipient: starknet::ContractAddress
+  ) {
       self._name.write(name_);
       self._symbol.write(symbol_);
+
+      self._mint(recipient, initial_supply);
     }
 
     fn _increase_allowance(ref self: ContractState, spender: starknet::ContractAddress, added_value: u256) -> bool {
