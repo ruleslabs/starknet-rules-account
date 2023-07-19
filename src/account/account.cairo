@@ -50,9 +50,9 @@ mod Account {
   use zeroable::Zeroable;
   use integer::U64Zeroable;
   use rules_utils::utils::traits::BoolIntoU8;
+  use rules_utils::introspection::erc165::{ ERC165, IERC165 };
 
   // locals
-  use rules_utils::introspection::erc165::{ ERC165, IERC165 };
   use rules_account::account;
   use super::{ QUERY_VERSION, TRANSACTION_VERSION };
 
