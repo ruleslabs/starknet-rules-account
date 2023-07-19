@@ -11,7 +11,7 @@ use integer::U64Zeroable;
 use rules_account::account::{ Account, QUERY_VERSION, TRANSACTION_VERSION };
 use rules_account::account::Account::{ ModifierTrait, HelperTrait };
 use rules_account::account::interface::{ IAccount, ISecureAccount, ERC1271_VALIDATED, IACCOUNT_ID, };
-use rules_account::introspection::erc165::IERC165_ID;
+use rules_utils::introspection::erc165::IERC165_ID;
 use rules_account::tests::utils;
 use rules_account::tests::mocks::erc20::ERC20;
 use rules_account::tests::mocks::upgrade::{ ValidUpgrade, InvalidUpgrade };
