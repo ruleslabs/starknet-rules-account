@@ -1,25 +1,41 @@
-use array::ArrayTrait;
-use array::SpanTrait;
-use starknet::ContractAddress;
+use array::{ SpanSerde };
+use starknet::account::Call;
 
-const IACCOUNT_ID: u32 = 0xa66bd575_u32;
-const ERC1271_VALIDATED: u32 = 0x1626ba7e_u32;
+const ISRC6_ID: felt252 = 0x2ceccef7f994940b3962a6c67e0ba4fcd37df7d131417c604f91e03caecc1cd;
+
+#[starknet::interface]
+trait ISRC6<TContractState> {
+  fn __execute__(self: @TContractState, calls: Array<Call>) -> Array<Span<felt252>>;
+  fn __validate__(self: @TContractState, calls: Array<Call>) -> felt252;
+  fn is_valid_signature(self: @TContractState, hash: felt252, signature: Array<felt252>) -> felt252;
+}
+
+#[starknet::interface]
+trait ISRC6Camel<TContractState> {
+  fn isValidSignature(self: @TContractState, hash: felt252, signature: Array<felt252>) -> felt252;
+}
+
+#[starknet::interface]
+trait IDeclarer<TContractState> {
+  fn __validate_declare__(self: @TContractState, class_hash: felt252) -> felt252;
+}
+
+#[starknet::interface]
+trait IDeployer<TContractState> {
+  fn __validate_deploy__(
+    self: @TContractState,
+    class_hash: felt252,
+    contract_address_salt: felt252,
+    signer_public_key_: felt252,
+    guardian_public_key_: felt252
+  ) -> felt252;
+}
 
 #[starknet::interface]
 trait IAccount<TContractState> {
   fn get_version(self: @TContractState) -> felt252;
 
   fn get_signer_public_key(self: @TContractState) -> felt252;
-
-  fn is_valid_signature(self: @TContractState, message: felt252, signature: Span<felt252>) -> u32;
-
-  fn supports_interface(self: @TContractState, interface_id: u32) -> bool;
-
-  fn __execute__(ref self: TContractState, calls: Array<starknet::account::Call>) -> Array<Span<felt252>>;
-
-  fn __validate__(ref self: TContractState, calls: Array<starknet::account::Call>) -> felt252;
-
-  fn __validate_declare__(ref self: TContractState, class_hash: felt252) -> felt252;
 
   fn set_signer_public_key(ref self: TContractState, new_public_key: felt252);
 }
@@ -29,14 +45,6 @@ trait ISecureAccount<TContractState> {
   fn get_guardian_public_key(self: @TContractState) -> felt252;
 
   fn get_signer_escape_activation_date(self: @TContractState) -> u64;
-
-  fn __validate_deploy__(
-    ref self: TContractState,
-    class_hash: felt252,
-    contract_address_salt: felt252,
-    signer_public_key_: felt252,
-    guardian_public_key_: felt252
-  ) -> felt252;
 
   fn set_guardian_public_key(ref self: TContractState, new_public_key: felt252);
 

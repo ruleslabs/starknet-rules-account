@@ -122,7 +122,7 @@ mod ERC20 {
   //
 
   #[generate_trait]
-  impl HelperImpl of HelperTrait {
+  impl InternalImpl of InternalTrait {
     fn initializer(
     ref self: ContractState,
     name_: felt252,

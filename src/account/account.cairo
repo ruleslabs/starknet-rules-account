@@ -50,10 +50,11 @@ mod Account {
   use zeroable::Zeroable;
   use integer::U64Zeroable;
   use rules_utils::utils::traits::BoolIntoU8;
-  use rules_utils::introspection::erc165::{ ERC165, IERC165 };
+  use rules_utils::introspection::src5::SRC5;
+  use rules_utils::introspection::interface::{ ISRC5, ISRC5Camel };
 
   // locals
-  use rules_account::account;
+  use rules_account::account::interface;
   use super::{ QUERY_VERSION, TRANSACTION_VERSION };
 
   const TRIGGER_ESCAPE_SIGNER_SELECTOR: felt252 =
@@ -164,38 +165,12 @@ mod Account {
   }
 
   //
-  // Account impl
+  // ISRC6
   //
 
   #[external(v0)]
-  impl AccountImpl of account::interface::IAccount<ContractState> {
-    fn get_version(self: @ContractState) -> felt252 {
-      CONTRACT_VERSION
-    }
-
-    fn is_valid_signature(self: @ContractState, message: felt252, signature: Span<felt252>) -> u32 {
-      if (self._is_valid_signature(:message, :signature, public_key: self._signer_public_key.read())) {
-        account::interface::ERC1271_VALIDATED
-      } else {
-        0_u32
-      }
-    }
-
-    fn supports_interface(self: @ContractState, interface_id: u32) -> bool {
-      if (interface_id == account::interface::IACCOUNT_ID) {
-        true
-      } else {
-        let erc165_self = ERC165::unsafe_new_contract_state();
-
-        erc165_self.supports_interface(:interface_id)
-      }
-    }
-
-    fn get_signer_public_key(self: @ContractState) -> felt252 {
-      self._signer_public_key.read()
-    }
-
-    fn __execute__(ref self: ContractState, calls: Array<starknet::account::Call>) -> Array<Span<felt252>> {
+  impl SRC6Impl of interface::ISRC6<ContractState> {
+    fn __execute__(self: @ContractState, calls: Array<starknet::account::Call>) -> Array<Span<felt252>> {
       // Modifiers
       self._non_reentrant();
       self._correct_tx_version();
@@ -204,12 +179,59 @@ mod Account {
       self._execute_calls(:calls)
     }
 
-    fn __validate__(ref self: ContractState, calls: Array<starknet::account::Call>) -> felt252 {
+    fn __validate__(self: @ContractState, calls: Array<starknet::account::Call>) -> felt252 {
       self._validate_transaction_with_calls(:calls)
     }
 
-    fn __validate_declare__(ref self: ContractState, class_hash: felt252) -> felt252 {
+    fn is_valid_signature(self: @ContractState, hash: felt252, signature: Array<felt252>) -> felt252 {
+      if (self._is_valid_signature(:hash, signature: signature.span(), public_key: self._signer_public_key.read())) {
+        starknet::VALIDATED
+      } else {
+        0
+      }
+    }
+  }
+
+  //
+  // IDeclarer impl
+  //
+
+  #[external(v0)]
+  impl IDeclarerImpl of interface::IDeclarer<ContractState> {
+    fn __validate_declare__(self: @ContractState, class_hash: felt252) -> felt252 {
       self._validate_transaction()
+    }
+  }
+
+  //
+  // IDeployer impl
+  //
+
+  #[external(v0)]
+  impl IDeployerImpl of interface::IDeployer<ContractState> {
+    fn __validate_deploy__(
+      self: @ContractState,
+      class_hash: felt252,
+      contract_address_salt: felt252,
+      signer_public_key_: felt252,
+      guardian_public_key_: felt252
+    ) -> felt252 {
+      starknet::VALIDATED
+    }
+  }
+
+  //
+  // IAccount impl
+  //
+
+  #[external(v0)]
+  impl AccountImpl of interface::IAccount<ContractState> {
+    fn get_version(self: @ContractState) -> felt252 {
+      CONTRACT_VERSION
+    }
+
+    fn get_signer_public_key(self: @ContractState) -> felt252 {
+      self._signer_public_key.read()
     }
 
     fn set_signer_public_key(ref self: ContractState, new_public_key: felt252) {
@@ -233,23 +255,13 @@ mod Account {
   //
 
   #[external(v0)]
-  impl SecureAccount of account::interface::ISecureAccount<ContractState> {
+  impl SecureAccount of interface::ISecureAccount<ContractState> {
     fn get_guardian_public_key(self: @ContractState, ) -> felt252 {
       self._guardian_public_key.read()
     }
 
     fn get_signer_escape_activation_date(self: @ContractState, ) -> u64 {
       self._signer_escape_activation_date.read()
-    }
-
-    fn __validate_deploy__(
-      ref self: ContractState,
-      class_hash: felt252,
-      contract_address_salt: felt252,
-      signer_public_key_: felt252,
-      guardian_public_key_: felt252
-    ) -> felt252 {
-      starknet::VALIDATED
     }
 
     fn set_guardian_public_key(ref self: ContractState, new_public_key: felt252) {
@@ -335,6 +347,30 @@ mod Account {
   }
 
   //
+  // ISRC5 impl
+  //
+
+  #[external(v0)]
+  impl SRC5Impl of ISRC5<ContractState> {
+    fn supports_interface(self: @ContractState, interface_id: felt252) -> bool {
+      if (interface_id == interface::ISRC6_ID) {
+        true
+      } else {
+        let src5 = SRC5::unsafe_new_contract_state();
+
+        src5.supports_interface(:interface_id)
+      }
+    }
+  }
+
+  #[external(v0)]
+  impl SRC5CamelImpl of ISRC5Camel<ContractState> {
+    fn supportsInterface(self: @ContractState, interfaceId: felt252) -> bool {
+      self.supports_interface(interface_id: interfaceId)
+    }
+  }
+
+  //
   // Upgrade impl
   //
 
@@ -349,7 +385,7 @@ mod Account {
 
       // Check if new impl is an account
       let mut calldata = ArrayTrait::new();
-      calldata.append(account::interface::IACCOUNT_ID.into());
+      calldata.append(interface::ISRC6_ID);
 
       let ret_data = starknet::library_call_syscall(
         class_hash: new_implementation,
@@ -378,9 +414,9 @@ mod Account {
   // Internals
   //
 
-  /// Helpers (internal functions)
+  /// Internals (internal functions)
   #[generate_trait]
-  impl HelperImpl of HelperTrait {
+  impl InternalImpl of InternalTrait {
 
     // Init
 
@@ -398,7 +434,7 @@ mod Account {
 
     // Validate
 
-    fn _validate_transaction_with_calls(ref self: ContractState, calls: Array<starknet::account::Call>) -> felt252 {
+    fn _validate_transaction_with_calls(self: @ContractState, calls: Array<starknet::account::Call>) -> felt252 {
       let tx_info = starknet::get_tx_info().unbox();
       let tx_hash = tx_info.transaction_hash;
       let signature = tx_info.signature;
@@ -421,7 +457,7 @@ mod Account {
       }
 
       // signature check
-      assert(self._is_valid_signature(message: tx_hash, :signature, :public_key), 'Account: invalid signature');
+      assert(self._is_valid_signature(hash: tx_hash, :signature, :public_key), 'Account: invalid signature');
 
       starknet::VALIDATED
     }
@@ -432,20 +468,18 @@ mod Account {
       let signature = tx_info.signature;
 
       assert(
-        self._is_valid_signature(message: tx_hash, :signature, public_key: self._signer_public_key.read()),
+        self._is_valid_signature(hash: tx_hash, :signature, public_key: self._signer_public_key.read()),
         'Account: invalid signature'
       );
 
       starknet::VALIDATED
     }
 
-    fn _is_valid_signature(self: @ContractState, message: felt252, signature: Span<felt252>, public_key: felt252) -> bool {
-      let valid_length = signature.len() == 2_u32;
+    fn _is_valid_signature(self: @ContractState, hash: felt252, signature: Span<felt252>, public_key: felt252) -> bool {
+      let valid_length = signature.len() == 2;
 
       if valid_length {
-        check_ecdsa_signature(
-          message, public_key, *signature.at(0_u32), *signature.at(1_u32)
-        )
+        check_ecdsa_signature(hash, public_key, *signature.at(0), *signature.at(1))
       } else {
         false
       }

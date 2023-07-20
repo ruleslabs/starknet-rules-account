@@ -9,9 +9,9 @@ use integer::U64Zeroable;
 
 // locals
 use rules_account::account::{ Account, QUERY_VERSION, TRANSACTION_VERSION };
-use rules_account::account::Account::{ ModifierTrait, HelperTrait };
-use rules_account::account::interface::{ IAccount, ISecureAccount, ERC1271_VALIDATED, IACCOUNT_ID, };
-use rules_utils::introspection::erc165::IERC165_ID;
+use rules_account::account::Account::{ ModifierTrait, InternalTrait };
+use rules_account::account::interface::{ IAccount, ISecureAccount, ISRC6, IDeclarer, IDeployer, ISRC6_ID };
+use rules_utils::introspection::interface::{ ISRC5, ISRC5_ID };
 use rules_account::tests::utils;
 use rules_account::tests::mocks::erc20::ERC20;
 use rules_account::tests::mocks::upgrade::{ ValidUpgrade, InvalidUpgrade };
@@ -136,8 +136,8 @@ fn test_interfaces() {
 
   account.initializer(signer_public_key_: SIGNER_PUBLIC_KEY, guardian_public_key_: GUARDIAN_PUBLIC_KEY);
 
-  assert(account.supports_interface(IERC165_ID), 'Should support base interface');
-  assert(account.supports_interface(IACCOUNT_ID), 'Should support account id');
+  assert(account.supports_interface(ISRC5_ID), 'Should support base interface');
+  assert(account.supports_interface(ISRC6_ID), 'Should support account id');
 }
 
 #[test]
@@ -159,12 +159,12 @@ fn test_is_valid_signature() {
   account.set_signer_public_key(data.public_key);
 
   // Test good signature
-  let is_valid = account.is_valid_signature(message, good_signature.span());
-  assert(is_valid == ERC1271_VALIDATED, 'Should accept valid signature');
+  let is_valid = account.is_valid_signature(message, good_signature);
+  assert(is_valid == starknet::VALIDATED, 'Should accept valid signature');
 
   // Test bad signature
-  let is_valid = account.is_valid_signature(message, bad_signature.span());
-  assert(is_valid == 0_u32, 'Should reject invalid signature');
+  let is_valid = account.is_valid_signature(message, bad_signature);
+  assert(is_valid == 0, 'Should reject invalid signature');
 }
 
 #[test]
@@ -649,7 +649,7 @@ fn test_upgrade_invalid_implementation() {
   let mut calldata = ArrayTrait::new();
   calldata.append(InvalidUpgrade::TEST_CLASS_HASH);
 
-  let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+  let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata };
 
   let mut calls = ArrayTrait::new();
   calls.append(call);
@@ -725,7 +725,7 @@ fn test__is_valid_signature() {
 }
 
 //
-// Helpers
+// Internals
 //
 
 fn test_execute_with_version(version: Option<felt252>) {

@@ -7,7 +7,7 @@ mod ValidUpgrade {
   fn constructor(ref self: ContractState) {}
 
   #[external(v0)]
-  fn supports_interface(self: @ContractState, interface_id: u32) -> bool {
+  fn supports_interface(self: @ContractState, interface_id: felt252) -> bool {
     true
   }
 }
@@ -21,7 +21,7 @@ mod InvalidUpgrade {
   fn constructor(ref self: ContractState) {}
 
   #[external(v0)]
-  fn supports_interface(self: @ContractState, interface_id: u32) -> bool {
+  fn supports_interface(self: @ContractState, interface_id: felt252) -> bool {
     false
   }
 }
