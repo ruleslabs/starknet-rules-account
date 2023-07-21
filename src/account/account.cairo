@@ -10,10 +10,10 @@ trait AccountABI<T> {
   fn get_signer_public_key(self: @T) -> felt252;
 
   #[view]
-  fn is_valid_signature(self: @T, message: felt252, signature: Span<felt252>) -> u32;
+  fn is_valid_signature(self: @T, message: felt252, signature: Span<felt252>) -> felt252;
 
   #[view]
-  fn supports_interface(self: @T, interface_id: u32) -> bool;
+  fn supports_interface(self: @T, interface_id: felt252) -> bool;
 
   #[external]
   fn upgrade(ref self: T, new_implementation: starknet::ClassHash);
