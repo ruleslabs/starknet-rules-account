@@ -66,14 +66,13 @@ fn setup_dispatcher(data: Option<@SignedTransactionData>) -> AccountABIDispatche
   testing::set_version(TRANSACTION_VERSION);
 
   // Deploy the account contract
-  let mut calldata = ArrayTrait::new();
+  let mut calldata = array![];
 
   match data {
     Option::Some(tx_data) => {
       // Set the signature and transaction hash
-      let mut signature = ArrayTrait::new();
-      signature.append(*tx_data.r);
-      signature.append(*tx_data.s);
+      let mut signature = array![*tx_data.r, *tx_data.s];
+
       testing::set_signature(signature.span());
       testing::set_transaction_hash(*tx_data.transaction_hash);
 
@@ -100,13 +99,13 @@ fn setup_dispatcher(data: Option<@SignedTransactionData>) -> AccountABIDispatche
 fn deploy_erc20(recipient: starknet::ContractAddress, initial_supply: u256) -> IERC20Dispatcher {
   let name = 0;
   let symbol = 0;
-  let mut calldata = ArrayTrait::<felt252>::new();
-
-  calldata.append(name);
-  calldata.append(symbol);
-  calldata.append(initial_supply.low.into());
-  calldata.append(initial_supply.high.into());
-  calldata.append(recipient.into());
+  let mut calldata = array![
+    name,
+    symbol,
+    initial_supply.low.into(),
+    initial_supply.high.into(),
+    recipient.into(),
+  ];
 
   let address = utils::deploy(ERC20::TEST_CLASS_HASH, calldata);
   IERC20Dispatcher { contract_address: address }
@@ -148,13 +147,8 @@ fn test_is_valid_signature() {
   let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
-  let mut good_signature = ArrayTrait::new();
-  good_signature.append(data.r);
-  good_signature.append(data.s);
-
-  let mut bad_signature = ArrayTrait::new();
-  bad_signature.append(0x987);
-  bad_signature.append(0x564);
+  let good_signature = array![data.r, data.s];
+  let bad_signature = array![0x987, 0x564];
 
   account.set_signer_public_key(data.public_key);
 
@@ -195,9 +189,8 @@ fn test_validate_deploy_invalid_signature_data() {
 #[available_gas(20000000)]
 fn test_validate_deploy_invalid_signature_length() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut signature = ArrayTrait::new();
+  let signature = array![0x1];
 
-  signature.append(0x1);
   testing::set_signature(signature.span());
 
   account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
@@ -207,7 +200,7 @@ fn test_validate_deploy_invalid_signature_length() {
 #[available_gas(20000000)]
 fn test_validate_deploy_empty_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let empty_sig = ArrayTrait::new();
+  let empty_sig = array![];
 
   testing::set_signature(empty_sig.span());
   account.__validate_deploy__(CLASS_HASH(), SALT, SIGNER_PUBLIC_KEY, GUARDIAN_PUBLIC_KEY);
@@ -243,9 +236,8 @@ fn test_validate_declare_invalid_signature_data() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_invalid_signature_length() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut signature = ArrayTrait::new();
+  let mut signature = array![0x1];
 
-  signature.append(0x1);
   testing::set_signature(signature.span());
 
   account.__validate_declare__(CLASS_HASH());
@@ -256,7 +248,7 @@ fn test_validate_declare_invalid_signature_length() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_empty_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let empty_sig = ArrayTrait::new();
+  let empty_sig = array![];
 
   testing::set_signature(empty_sig.span());
 
@@ -285,7 +277,7 @@ fn test_execute_invalid_version() {
 #[test]
 #[available_gas(20000000)]
 fn test_validate() {
-  let calls = ArrayTrait::new();
+  let calls = array![];
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
   assert(account.__validate__(calls) == starknet::VALIDATED, 'Should validate correctly');
@@ -295,7 +287,7 @@ fn test_validate() {
 #[available_gas(20000000)]
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_invalid() {
-  let calls = ArrayTrait::new();
+  let calls = array![];
   let mut data = SIGNED_TX_DATA(guardian_tx: false);
   data.transaction_hash += 1;
   let account = setup_dispatcher(Option::Some(@data));
@@ -310,31 +302,25 @@ fn test_multicall() {
   let erc20 = deploy_erc20(account.contract_address, 1000);
   let recipient1 = starknet::contract_address_const::<0x123>();
   let recipient2 = starknet::contract_address_const::<0x456>();
-  let mut calls = ArrayTrait::new();
 
   // Craft call1
-  let mut calldata1 = ArrayTrait::new();
   let amount1: u256 = 300;
-  calldata1.append(recipient1.into());
-  calldata1.append(amount1.low.into());
-  calldata1.append(amount1.high.into());
+  let calldata1 = array![recipient1.into(), amount1.low.into(), amount1.high.into()];
+
   let call1 = starknet::account::Call {
     to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata1
   };
 
   // Craft call2
-  let mut calldata2 = ArrayTrait::new();
   let amount2: u256 = 500;
-  calldata2.append(recipient2.into());
-  calldata2.append(amount2.low.into());
-  calldata2.append(amount2.high.into());
+  let calldata2 = array![recipient2.into(), amount2.low.into(), amount2.high.into()];
+
   let call2 = starknet::account::Call {
     to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata2
   };
 
   // Bundle calls and exeute
-  calls.append(call1);
-  calls.append(call2);
+  let calls = array![call1, call2];
   let ret = account.__execute__(calls);
 
   // Assert that the transfers were successful
@@ -355,7 +341,7 @@ fn test_multicall() {
 #[available_gas(20000000)]
 fn test_multicall_zero_calls() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut calls = ArrayTrait::new();
+  let calls = array![];
 
   let ret = account.__execute__(calls);
 
@@ -410,7 +396,7 @@ fn test_guardian_public_key_setter_different_account() {
 fn test_account_called_from_contract() {
   let mut account = Account::contract_state_for_testing();
 
-  let calls = ArrayTrait::new();
+  let calls = array![];
   let caller = starknet::contract_address_const::<0x123>();
   testing::set_contract_address(ACCOUNT_ADDRESS());
   testing::set_caller_address(caller);
@@ -424,14 +410,15 @@ fn test_account_called_from_contract() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_trigger_signer_escape_with_signer_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut calls = ArrayTrait::new();
 
-  // Craft call
-  calls.append(starknet::account::Call {
-    to: account.contract_address,
-    selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
-    calldata: ArrayTrait::new(),
-  });
+  // Craft calls
+  let calls = array![
+    starknet::account::Call {
+      to: account.contract_address,
+      selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
+      calldata: array![],
+    },
+  ];
 
   account.__validate__(calls);
 }
@@ -441,14 +428,15 @@ fn test_trigger_signer_escape_with_signer_signature() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_escape_signer_with_signer_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut calls = ArrayTrait::new();
 
-  // Craft call
-  calls.append(starknet::account::Call {
-    to: account.contract_address,
-    selector: Account::ESCAPE_SIGNER_SELECTOR,
-    calldata: ArrayTrait::new(),
-  });
+  // Craft calls
+  let calls = array![
+    starknet::account::Call {
+      to: account.contract_address,
+      selector: Account::ESCAPE_SIGNER_SELECTOR,
+      calldata: array![],
+    },
+  ];
 
   account.__validate__(calls);
 }
@@ -457,14 +445,15 @@ fn test_escape_signer_with_signer_signature() {
 #[available_gas(20000000)]
 fn test_trigger_signer_escape_with_guardian_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: true)));
-  let mut calls = ArrayTrait::new();
 
-  // Craft call
-  calls.append(starknet::account::Call {
-    to: account.contract_address,
-    selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
-    calldata: ArrayTrait::new(),
-  });
+  // Craft calls
+  let calls = array![
+    starknet::account::Call {
+      to: account.contract_address,
+      selector: Account::TRIGGER_ESCAPE_SIGNER_SELECTOR,
+      calldata: array![],
+    },
+  ];
 
   account.__validate__(calls);
 }
@@ -473,14 +462,15 @@ fn test_trigger_signer_escape_with_guardian_signature() {
 #[available_gas(20000000)]
 fn test_escape_signer_with_guardian_signature() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: true)));
-  let mut calls = ArrayTrait::new();
 
-  // Craft call
-  calls.append(starknet::account::Call {
-    to: account.contract_address,
-    selector: Account::ESCAPE_SIGNER_SELECTOR,
-    calldata: ArrayTrait::new(),
-  });
+  // Craft calls
+  let calls = array![
+    starknet::account::Call {
+      to: account.contract_address,
+      selector: Account::ESCAPE_SIGNER_SELECTOR,
+      calldata: array![],
+    },
+  ];
 
   account.__validate__(calls);
 }
@@ -646,13 +636,15 @@ fn test_upgrade_unauthorized() {
 fn test_upgrade_invalid_implementation() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
-  let mut calldata = ArrayTrait::new();
-  calldata.append(InvalidUpgrade::TEST_CLASS_HASH);
+  let calldata = array![InvalidUpgrade::TEST_CLASS_HASH];
 
-  let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata };
-
-  let mut calls = ArrayTrait::new();
-  calls.append(call);
+  let calls = array![
+    starknet::account::Call {
+      to: account.contract_address,
+      selector: UPGRADE_SELECTOR,
+      calldata,
+    },
+  ];
 
   account.__execute__(:calls);
 }
@@ -701,16 +693,11 @@ fn test__is_valid_signature() {
   let data = SIGNED_TX_DATA(guardian_tx: false);
   let message = data.transaction_hash;
 
-  let mut good_signature = ArrayTrait::new();
-  good_signature.append(data.r);
-  good_signature.append(data.s);
+  let good_signature = array![data.r, data.s];
 
-  let mut bad_signature = ArrayTrait::new();
-  bad_signature.append(0x987);
-  bad_signature.append(0x564);
+  let bad_signature = array![0x987, 0x564];
 
-  let mut invalid_length_signature = ArrayTrait::new();
-  invalid_length_signature.append(0x987);
+  let invalid_length_signature = array![0x987];
 
   account.set_signer_public_key(data.public_key);
 
@@ -735,14 +722,16 @@ fn test_execute_with_version(version: Option<felt252>) {
   let recipient = starknet::contract_address_const::<0x123>();
 
   // Craft call and add to calls array
-  let mut calldata = ArrayTrait::new();
   let amount: u256 = 200;
-  calldata.append(recipient.into());
-  calldata.append(amount.low.into());
-  calldata.append(amount.high.into());
-  let call = starknet::account::Call { to: erc20.contract_address, selector: TRANSFER_SELECTOR, calldata: calldata };
-  let mut calls = ArrayTrait::new();
-  calls.append(call);
+  let calldata = array![recipient.into(), amount.low.into(), amount.high.into()];
+
+  let calls = array![
+    starknet::account::Call {
+      to: erc20.contract_address,
+      selector: TRANSFER_SELECTOR,
+      calldata,
+    },
+  ];
 
   // Handle version for test
   if version.is_some() {

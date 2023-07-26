@@ -384,8 +384,7 @@ mod Account {
       // Body
 
       // Check if new impl is an account
-      let mut calldata = ArrayTrait::new();
-      calldata.append(interface::ISRC6_ID);
+      let calldata = array![interface::ISRC6_ID];
 
       let ret_data = starknet::library_call_syscall(
         class_hash: new_implementation,
@@ -488,7 +487,7 @@ mod Account {
     // Execute
 
     fn _execute_calls(self: @ContractState, mut calls: Array<starknet::account::Call>) -> Array<Span<felt252>> {
-      let mut res = ArrayTrait::new();
+      let mut res = array![];
 
       loop {
         match calls.pop_front() {
