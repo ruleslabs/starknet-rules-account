@@ -615,15 +615,17 @@ fn test_upgrade_unauthorized() {
 // fn test_upgrade_valid_implementation() {
 //   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
-//   let mut calldata = ArrayTrait::new();
-//   calldata.append(ValidUpgrade::TEST_CLASS_HASH);
+//   let mut calldata = array![ValidUpgrade::TEST_CLASS_HASH]
 
-//   let call = starknet::account::Call { to: account.contract_address, selector: UPGRADE_SELECTOR, calldata: calldata };
+//   let calls = array![
+//     starknet::account::Call {
+//       to: account.contract_address,
+//       selector: UPGRADE_SELECTOR,
+//       calldata,
+//     },
+//   ];
 
 //   assert(!account.supports_interface(0xdead), 'interface support before');
-
-//   let mut calls = ArrayTrait::new();
-//   calls.append(call);
 
 //   account.__execute__(:calls);
 
