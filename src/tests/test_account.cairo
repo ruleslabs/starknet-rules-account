@@ -71,7 +71,7 @@ fn setup_dispatcher(data: Option<@SignedTransactionData>) -> AccountABIDispatche
   match data {
     Option::Some(tx_data) => {
       // Set the signature and transaction hash
-      let mut signature = array![*tx_data.r, *tx_data.s];
+      let signature = array![*tx_data.r, *tx_data.s];
 
       testing::set_signature(signature.span());
       testing::set_transaction_hash(*tx_data.transaction_hash);
@@ -99,7 +99,7 @@ fn setup_dispatcher(data: Option<@SignedTransactionData>) -> AccountABIDispatche
 fn deploy_erc20(recipient: starknet::ContractAddress, initial_supply: u256) -> IERC20Dispatcher {
   let name = 0;
   let symbol = 0;
-  let mut calldata = array![
+  let calldata = array![
     name,
     symbol,
     initial_supply.low.into(),
@@ -236,7 +236,7 @@ fn test_validate_declare_invalid_signature_data() {
 #[should_panic(expected: ('Account: invalid signature', 'ENTRYPOINT_FAILED'))]
 fn test_validate_declare_invalid_signature_length() {
   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
-  let mut signature = array![0x1];
+  let signature = array![0x1];
 
   testing::set_signature(signature.span());
 
@@ -615,7 +615,7 @@ fn test_upgrade_unauthorized() {
 // fn test_upgrade_valid_implementation() {
 //   let account = setup_dispatcher(Option::Some(@SIGNED_TX_DATA(guardian_tx: false)));
 
-//   let mut calldata = array![ValidUpgrade::TEST_CLASS_HASH]
+//   let calldata = array![ValidUpgrade::TEST_CLASS_HASH]
 
 //   let calls = array![
 //     starknet::account::Call {
