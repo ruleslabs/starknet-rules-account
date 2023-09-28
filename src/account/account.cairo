@@ -49,6 +49,7 @@ mod Account {
   use traits::Into;
   use zeroable::Zeroable;
   use integer::U64Zeroable;
+  use starknet::SyscallResultTrait;
   use rules_utils::utils::traits::BoolIntoU8;
   use rules_utils::introspection::src5::SRC5;
   use rules_utils::introspection::interface::{ ISRC5, ISRC5Camel };
@@ -506,7 +507,11 @@ mod Account {
 
     fn _execute_single_call(self: @ContractState, call: starknet::account::Call) -> Span<felt252> {
       let starknet::account::Call { to, selector, calldata } = call;
-      starknet::call_contract_syscall(to, selector, calldata.span()).unwrap_syscall()
+      starknet::call_contract_syscall(
+        address: to,
+        entry_point_selector: selector,
+        calldata: calldata.span()
+      ).unwrap_syscall()
     }
   }
 }
