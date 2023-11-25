@@ -9,7 +9,6 @@ name = "rules_account"
 
 [dependencies]
 rules_utils = { git = "https://github.com/ruleslabs/starknet-utils.git" }
-starknet = ">=2.1.0-rc0"
 
 [[target.starknet-contract]]
 # Enable Sierra codegen.

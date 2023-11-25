@@ -6,28 +6,20 @@ const QUERY_VERSION: felt252 = 0x100000000000000000000000000000001;
 
 #[starknet::interface]
 trait AccountABI<T> {
-  #[view]
   fn get_signer_public_key(self: @T) -> felt252;
 
-  #[view]
   fn is_valid_signature(self: @T, message: felt252, signature: Span<felt252>) -> felt252;
 
-  #[view]
   fn supports_interface(self: @T, interface_id: felt252) -> bool;
 
-  #[external]
   fn upgrade(ref self: T, new_implementation: starknet::ClassHash);
 
-  #[external]
   fn __execute__(ref self: T, calls: Array<starknet::account::Call>) -> Array<Span<felt252>>;
 
-  #[external]
   fn __validate__(ref self: T, calls: Array<starknet::account::Call>) -> felt252;
 
-  #[external]
   fn __validate_declare__(ref self: T, class_hash: felt252) -> felt252;
 
-  #[external]
   fn __validate_deploy__(
     ref self: T,
     class_hash: felt252,
@@ -36,7 +28,6 @@ trait AccountABI<T> {
     guardian_public_key_: felt252
   ) -> felt252;
 
-  #[external]
   fn set_signer_public_key(ref self: T, new_signer_public_key: felt252);
 }
 
